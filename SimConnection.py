@@ -1,14 +1,40 @@
 
 from SimConnect import *
-from time import *
+import time
+import random
 import threading
 import socket
+import cbor2
+import tkinter as tk
+
+frame_check = 1498304334
+portNumber = 49301
+
+# Map of default values for each data type
+default_values = {
+    "VERTICAL_SPEED": 0.0,
+    "ROTATION_VELOCITY_BODY_X": 0.0,
+    "ROTATION_VELOCITY_BODY_Y": 0.0,
+    "ROTATION_VELOCITY_BODY_Z": 0.0,
+    "TURN_COORDINATOR_BALL": 0.0,
+    "G_FORCE": 1.0,
+    "PRESSURE_ALTITUDE": 0.0,
+    "AIRSPEED_INDICATED": 0.0,
+    "AIRSPEED_TRUE": 0.0,
+    "INCIDENCE_ALPHA": 0.0,
+    "STANDARD_ATM_TEMPERATURE": 15.0,
+    "PLANE_HEADING_DEGREES_MAGNETIC": 0.0,
+    "PLANE_PITCH_DEGREES": 0.0,
+    "PLANE_BANK_DEGREES": 0.0,
+    "PLANE_LATITUDE": 0.0,
+    "PLANE_LONGITUDE": 0.0
+}
 
 class DataThread:
     value = 0
     is_running = True
     simConnected = False
-    last_update = time()
+    last_update = time.time()
     ValLock = threading.Lock()
     timeLock = threading.Lock()
     fps = 0
@@ -17,7 +43,7 @@ class DataThread:
         self.dataTarget = dataTarget
         try:
             self.sm = SimConnect()
-            self.aq = AircraftRequests(self.sm, _time=16)
+            self.aq = AircraftRequests(self.sm, _time=8)
             self.simConnected = True
         except Exception as e:
             self.simConnected = False
@@ -28,25 +54,29 @@ class DataThread:
     def run(self):
         while True:
             # Check if the thread is safe to run
-            value = self.value + .00001  # Add a small random value to simulate changes
+            value = 0
             if(self.simConnected):
                 value = self.aq.get(self.dataTarget)
+            else:
+                if self.dataTarget in default_values:
+                    value = default_values[self.dataTarget]
+                time.sleep(0.1)
             
             self.ValLock.acquire()
             self.value = value
             self.ValLock.release()
 
-            delta = time() - self.last_update
+            delta = time.time() - self.last_update
             # Avoid divide by zero if the update is too fast
             while delta == 0:
-                delta = time() - self.last_update
+                time.sleep(0.001)
+                delta = time.time() - self.last_update
             self.timeLock.acquire()
-            self.fps = 1 / delta
+            self.fps = ((1 / delta) * .01) + (self.fps * 0.99)
             self.timeLock.release()
-            self.last_update = time()
+            self.last_update = time.time()
     
     def get_value(self):
-
         self.ValLock.acquire()
         value = self.value
         self.ValLock.release()
@@ -62,21 +92,24 @@ class DataThread:
         return self.simConnected
 
 class DataManager:
-    valuesLock = threading.Lock()
     values = {}
 
     def __init__(self):
         pass
 
     def addValue(self, name):
-        self.valuesLock.acquire()
         if name not in self.values:
             self.values[name] = DataThread(name)
-        self.valuesLock.release()
 
     def get_value(self, name):
         self.addValue(name)
         return self.values[name].get_value()
+
+    def get_value_safe(self, name):
+        value = self.get_value(name)
+        if value is None:
+            return random.random() * 100
+        return value
 
     def get_fps(self, name):
         self.addValue(name)
@@ -87,37 +120,14 @@ class DataManager:
         return self.values[name].get_is_connected()
     
     def get_all_values(self):
-        self.valuesLock.acquire()
         all_values = {name: thread.get_value() for name, thread in self.values.items()}
-        self.valuesLock.release()
         return all_values
-
-class UDPServerThread:
-    def __init__(self, data_manager, host='0.0.0.0', port=5005):
-        self.data_manager = data_manager
-        self.host = host
-        self.port = port
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind((self.host, self.port))
-        self.running = True
-        self.thread = threading.Thread(target=self.run, daemon=True)
-        self.thread.start()
-
-    def run(self):
-        while self.running:
-            try:
-                data, addr = self.sock.recvfrom(1024)
-                request = data.decode().strip()
-                if request:
-                    value = self.data_manager.get_value(request)
-                    response = str(value).encode()
-                    self.sock.sendto(response, addr)
-            except Exception:
-                continue
-
 
 class DisplayManager:
     lineCount = 0
+    maxLines = 30
+    maxWidth = 100
+
 
     def __init__(self):
         pass
@@ -131,19 +141,195 @@ class DisplayManager:
             print("\033[F", end="")
         self.lineCount = 0
 
-DSM = DisplayManager()
-DM = DataManager()
-start_time = time()
+class BasicDisplay:
+    is_running = True
+    island_net_enabled = False
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("SkySim")
+        self.label = tk.Label(self.root, text="SkySim")
+        self.label.pack()
+        self.root.geometry("800x600")
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.button = tk.Button(self.root, text="Enable Island-Net", bg="red", fg="white", command=self.toggle_island_net)
+        self.button.master = self.root
+        self.button.pack(pady=10)
+
+    def toggle_island_net(self):
+        self.island_net_enabled = not self.island_net_enabled
+        if self.island_net_enabled:
+            self.button.config(text="Island-Net Enabled", bg="green")
+        else:
+            self.button.config(text="Enable Island-Net", bg="red")
+
+    def on_close(self):
+        print("Closing...")
+        self.root.destroy()
+        self.is_running = False
+        exit(0)
 
 
-udp_server = UDPServerThread(DM)
+    def update_text(self, text):
+        self.label.config(text=text)
+        self.root.update_idletasks()
+
+class AdahrsSim:
+    topic = 7
+    adahrsAddr = ('ff13::4459:' + str(topic), portNumber)
+    sequenceNumber = 0
+    verticalSpeedFiltered = 0
+    running = True
+
+    def __init__(self, data_manager, sock):
+        self.data_manager = data_manager
+        self.sock = sock
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
+
+    def run(self):
+        last_time = time.time()
+        while self.running:
+            if(time.time() - last_time > 1.0/64.0):
+                self.sock.sendto(self.get_cbor_packet(), self.adahrsAddr)
+                last_time = time.time()
+            else:
+                time.sleep(0.001)
+
+    def convert_to_degrees(self, radians):
+        return radians * (180.0 / 3.141592653589793)
+
+    def convert_to_mps(self, knots):
+        return knots * 0.514444
+
+    def get_cbor_packet(self):
+        VSIfilterCoef = 0.95
+        self.verticalSpeedFiltered = (self.verticalSpeedFiltered * VSIfilterCoef) + (self.data_manager.get_value_safe("VERTICAL_SPEED") * 0.00508 * (1-VSIfilterCoef))
+        
+
+        data = {
+            "d": frame_check,
+            "seq": self.sequenceNumber,
+            "topic": self.topic,
+            "txid": 0,
+            "payload": {
+                "AhrsG4Dat_V1": {
+                    "version" : 1,
+                    "valid": True,
+                    "tick": self.sequenceNumber,
+                    "body": {
+                        "xyz_rate": [
+                            self.data_manager.get_value_safe("ROTATION_VELOCITY_BODY_X"),
+                            self.data_manager.get_value_safe("ROTATION_VELOCITY_BODY_Y"),
+                            self.data_manager.get_value_safe("ROTATION_VELOCITY_BODY_Z")
+                        ],
+                        "xyz_acc": [
+                            0.0,
+                            -self.data_manager.get_value_safe("TURN_COORDINATOR_BALL"),
+                            -self.data_manager.get_value_safe("G_FORCE")
+                        ]
+                    },
+                    "p_alt": self.data_manager.get_value_safe("PRESSURE_ALTITUDE"),
+                    "vs": self.verticalSpeedFiltered,
+                    "ias": self.convert_to_mps(self.data_manager.get_value_safe("AIRSPEED_INDICATED")),
+                    "tas": self.convert_to_mps(self.data_manager.get_value_safe("AIRSPEED_TRUE")),
+                    "aoa": self.data_manager.get_value_safe("INCIDENCE_ALPHA"),
+                    "oat": self.data_manager.get_value_safe("STANDARD_ATM_TEMPERATURE"),
+                    "world": {
+                        "ypr": [ # For whatever reason, MSFS gives these in radians, but specifies them as degrees.
+                            self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_HEADING_DEGREES_MAGNETIC")),
+                            -self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_PITCH_DEGREES")),
+                            -self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_BANK_DEGREES"))
+                        ],
+                        "ypr_rate": [
+                            0.0,
+                            0.0,
+                            0.0
+                        ]
+                    }
+                }
+            }
+        }
+        self.sequenceNumber += 1
+
+        return cbor2.dumps(data)
 
 
-while(start_time - time() < 10):
-    values = DM.get_all_values()
-    DSM.resetPointer()
+class HsiSim:
+    topic = 15
+    adahrsAddr = ('ff13::4459:' + str(topic), portNumber)
+    sequenceNumber = 0
+    running = True
 
-    for name, value in values.items():
-        DSM.print_line(f"{name}: {value:.2f} | FPS: {DM.get_fps(name):.2f} | Connected: {DM.get_is_connected(name)}")
+    def __init__(self, data_manager, sock):
+        self.data_manager = data_manager
+        self.sock = sock
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
     
-    sleep(0.1)
+    def run(self):
+        last_time = time.time()
+        while self.running:
+            if(time.time() - last_time > 1.0/64.0):
+                self.sock.sendto(self.get_cbor_packet(), self.adahrsAddr)
+                last_time = time.time()
+            else:
+                time.sleep(0.001)
+    
+    def get_cbor_packet(self):
+        data = {
+            "d": frame_check,
+            "seq": self.sequenceNumber,
+            "topic": self.topic,
+            "txid": 0,
+            "payload": {
+                "HsiG4Dat_V1": {
+                    "version" : 1,
+                    "valid": True,
+                    "tick": self.sequenceNumber,
+
+                    "crs_dev": 0.0,
+                    "gp_dev": 0.0,
+                    "roll_command": 0.0,
+                    "lat": self.data_manager.get_value_safe("PLANE_LATITUDE"),
+                    "lon": self.data_manager.get_value_safe("PLANE_LONGITUDE"),
+                }
+            }
+        }
+        self.sequenceNumber += 1
+
+        return cbor2.dumps(data)
+
+    
+
+def main():
+    print("Starting Data Manager...")
+    DSM = DisplayManager()
+    DM = DataManager()
+    start_time = time.time()
+    # Get user input for the last two hex values of the Gen4 network interface address
+    last_two_hex = input("Enter the last two hex values for Gen4 address (e.g. the sim is, '43' for fd44:594e:4f4e:1::__): ").strip()
+    gen4NetworkInterfaceAddress = f"fd44:594e:4f4e:1::{last_two_hex}"
+    sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+    sock.bind((gen4NetworkInterfaceAddress, portNumber))
+
+    adahrs = AdahrsSim(DM, sock)
+    hsi = HsiSim(DM, sock)
+
+    while(True):
+        values = DM.get_all_values()
+        DSM.resetPointer()
+        DSM.print_line(f"Up Time: {time.time() - start_time:.2f}s")
+        DSM.print_line(f"{'DataName':<40} | {'Value':>10} | {'FPS':>10} | {'Connected':<10}")
+        DSM.print_line("-" * 100)
+        for name, value in values.items():
+            if(value is None):
+                value = 0.0
+            connected = "Yes" if DM.get_is_connected(name) else "No"
+            fps = DM.get_fps(name)
+            fps_str = f"{fps:.1f}" if fps < 1000 else f"{fps:.0f}"
+            DSM.print_line(f"{name:<40} | {value:>10.2f} | {fps_str:>10} | {connected:<10}")
+        
+        time.sleep(0.1)
+
+if __name__ == "__main__":
+    main()

@@ -14,7 +14,7 @@
  * @return The value as a double, or -1.0 on error
  */
 double get_msfs_value(const std::string& sim_var_name, 
-                      const std::string& server_ip = "127.0.0.1", 
+                      const std::string& server_ip = "10.0.11.81", 
                       int server_port = 5005) {
     int sock;
     struct sockaddr_in server_addr;
@@ -91,7 +91,7 @@ int main() {
             std::cout << "Failed to get airspeed" << std::endl;
         }
         
-        sleep(1);
+        sleep(.16);
     }
     
     return 0;
