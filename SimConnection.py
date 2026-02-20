@@ -6,19 +6,20 @@ import threading
 import socket
 import cbor2
 import tkinter as tk
+import netifaces
 
 frame_check = 1498304334
 portNumber = 49301
 
 # Map of default values for each data type
 default_values = {
-    "VERTICAL_SPEED": 0.0,
+    "VERTICAL_SPEED": 400.0,
     "ROTATION_VELOCITY_BODY_X": 0.0,
     "ROTATION_VELOCITY_BODY_Y": 0.0,
     "ROTATION_VELOCITY_BODY_Z": 0.0,
     "TURN_COORDINATOR_BALL": 0.0,
     "G_FORCE": 1.0,
-    "PRESSURE_ALTITUDE": 0.0,
+    "PRESSURE_ALTITUDE": 1500.0,
     "AIRSPEED_INDICATED": 0.0,
     "AIRSPEED_TRUE": 0.0,
     "INCIDENCE_ALPHA": 0.0,
@@ -26,8 +27,8 @@ default_values = {
     "PLANE_HEADING_DEGREES_MAGNETIC": 0.0,
     "PLANE_PITCH_DEGREES": 0.0,
     "PLANE_BANK_DEGREES": 0.0,
-    "PLANE_LATITUDE": 0.0,
-    "PLANE_LONGITUDE": 0.0
+    "PLANE_LATITUDE": 47.0,
+    "PLANE_LONGITUDE": -122.0
 }
 
 class DataThread:
@@ -43,7 +44,7 @@ class DataThread:
         self.dataTarget = dataTarget
         try:
             self.sm = SimConnect()
-            self.aq = AircraftRequests(self.sm, _time=8)
+            self.aq = AircraftRequests(self.sm, _time=16)
             self.simConnected = True
         except Exception as e:
             self.simConnected = False
@@ -60,7 +61,7 @@ class DataThread:
             else:
                 if self.dataTarget in default_values:
                     value = default_values[self.dataTarget]
-                time.sleep(0.1)
+                time.sleep(0.001)
             
             self.ValLock.acquire()
             self.value = value
@@ -108,7 +109,7 @@ class DataManager:
     def get_value_safe(self, name):
         value = self.get_value(name)
         if value is None:
-            return random.random() * 100
+            return 0.0
         return value
 
     def get_fps(self, name):
@@ -127,55 +128,26 @@ class DisplayManager:
     lineCount = 0
     maxLines = 30
     maxWidth = 100
+    debug = False
 
 
     def __init__(self):
         pass
 
     def print_line(self, text):
-        print("\033[K" + text)
+        if(not self.debug):
+            print("\033[K" + text)
         self.lineCount += 1
     
     def resetPointer(self):
         for _ in range(self.lineCount):
-            print("\033[F", end="")
+            if(not self.debug):
+                print("\033[F", end="")
         self.lineCount = 0
-
-class BasicDisplay:
-    is_running = True
-    island_net_enabled = False
-    def __init__(self):
-        self.root = tk.Tk()
-        self.root.title("SkySim")
-        self.label = tk.Label(self.root, text="SkySim")
-        self.label.pack()
-        self.root.geometry("800x600")
-        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-        self.button = tk.Button(self.root, text="Enable Island-Net", bg="red", fg="white", command=self.toggle_island_net)
-        self.button.master = self.root
-        self.button.pack(pady=10)
-
-    def toggle_island_net(self):
-        self.island_net_enabled = not self.island_net_enabled
-        if self.island_net_enabled:
-            self.button.config(text="Island-Net Enabled", bg="green")
-        else:
-            self.button.config(text="Enable Island-Net", bg="red")
-
-    def on_close(self):
-        print("Closing...")
-        self.root.destroy()
-        self.is_running = False
-        exit(0)
-
-
-    def update_text(self, text):
-        self.label.config(text=text)
-        self.root.update_idletasks()
 
 class AdahrsSim:
     topic = 7
-    adahrsAddr = ('ff13::4459:' + str(topic), portNumber)
+    adahrsAddr = ('ff13::4459:' + hex(topic)[2:], portNumber)
     sequenceNumber = 0
     verticalSpeedFiltered = 0
     running = True
@@ -189,7 +161,7 @@ class AdahrsSim:
     def run(self):
         last_time = time.time()
         while self.running:
-            if(time.time() - last_time > 1.0/64.0):
+            if(time.time() - last_time > 1.0/65.0):
                 self.sock.sendto(self.get_cbor_packet(), self.adahrsAddr)
                 last_time = time.time()
             else:
@@ -203,7 +175,7 @@ class AdahrsSim:
 
     def get_cbor_packet(self):
         VSIfilterCoef = 0.95
-        self.verticalSpeedFiltered = (self.verticalSpeedFiltered * VSIfilterCoef) + (self.data_manager.get_value_safe("VERTICAL_SPEED") * 0.00508 * (1-VSIfilterCoef))
+        self.verticalSpeedFiltered = (self.verticalSpeedFiltered * VSIfilterCoef) + (self.data_manager.get_value_safe("VERTICAL_SPEED") * (1-VSIfilterCoef))
         
 
         data = {
@@ -256,7 +228,7 @@ class AdahrsSim:
 
 class HsiSim:
     topic = 15
-    adahrsAddr = ('ff13::4459:' + str(topic), portNumber)
+    adahrsAddr = ('ff13::4459:' + hex(topic)[2:], portNumber)
     sequenceNumber = 0
     running = True
 
@@ -269,8 +241,10 @@ class HsiSim:
     def run(self):
         last_time = time.time()
         while self.running:
-            if(time.time() - last_time > 1.0/64.0):
-                self.sock.sendto(self.get_cbor_packet(), self.adahrsAddr)
+            if(time.time() - last_time > 1.0/17.0):
+                packet = self.get_cbor_packet()
+                if(self.sequenceNumber > 16):
+                    self.sock.sendto(packet, self.adahrsAddr)
                 last_time = time.time()
             else:
                 time.sleep(0.001)
@@ -287,11 +261,33 @@ class HsiSim:
                     "valid": True,
                     "tick": self.sequenceNumber,
 
-                    "crs_dev": 0.0,
-                    "gp_dev": 0.0,
-                    "roll_command": 0.0,
-                    "lat": self.data_manager.get_value_safe("PLANE_LATITUDE"),
-                    "lon": self.data_manager.get_value_safe("PLANE_LONGITUDE"),
+                    "pos": {
+                        "mag_var": 0.0,
+                        "lat" : self.data_manager.get_value_safe("PLANE_LATITUDE"),
+                        "lon" : self.data_manager.get_value_safe("PLANE_LONGITUDE"),
+                        "alt" : self.data_manager.get_value_safe("PRESSURE_ALTITUDE"),
+                        "lat_lon_valid": True,
+                        "alt_valid": True,
+                        "timestamp": 20,
+                        "gndspd": self.data_manager.get_value_safe("GROUND_VELOCITY"),
+                        "gndtrk": 90.0
+                    },
+                    "time": {
+                        "y": time.localtime().tm_year,
+                        "m": time.localtime().tm_mon,
+                        "d": time.localtime().tm_mday,
+                        "h": time.localtime().tm_hour,
+                        "min": time.localtime().tm_min,
+                        "s": time.localtime().tm_sec
+                    },
+                    "nav": {
+                        "crs_dev": self.data_manager.get_value_safe("NAV_CDI:1"),
+                        "gsi_dev": self.data_manager.get_value_safe("NAV_GSI"),
+                        "active_freq": self.data_manager.get_value_safe("NAV_ACTIVE_FREQUENCY:1"),
+                        "active_freq_ils": True,
+                        "standby_freq": self.data_manager.get_value_safe("NAV_STANDBY_FREQUENCY:1"),
+                        "standby_freq_ils": False,
+                    }
                 }
             }
         }
@@ -307,8 +303,28 @@ def main():
     DM = DataManager()
     start_time = time.time()
     # Get user input for the last two hex values of the Gen4 network interface address
-    last_two_hex = input("Enter the last two hex values for Gen4 address (e.g. the sim is, '43' for fd44:594e:4f4e:1::__): ").strip()
+    # Automatically find the last two hex values from network interfaces
+    last_two_hex = None
+    for interface in netifaces.interfaces():
+        addrs = netifaces.ifaddresses(interface)
+        if netifaces.AF_INET6 in addrs:
+            for addr_info in addrs[netifaces.AF_INET6]:
+                addr = addr_info['addr'].split('%')[0]  # Remove scope ID if present
+                # Look for fd44:594e:4f4e:1:: prefix
+                if addr.startswith('fd44:594e:4f4e:1::') and addr != 'fd44:594e:4f4e:1::':
+                    # Extract the last part after the prefix
+                    last_part = addr.replace('fd44:594e:4f4e:1::', '')
+                    if last_part:
+                        last_two_hex = last_part
+                        print(f"Found Gen4 interface: {interface} - {addr}")
+                        break
+        if last_two_hex:
+            break
+
+    if not last_two_hex:
+        last_two_hex = input("Could not auto-detect. Enter the last two hex values for Gen4 address (e.g. '43' for fd44:594e:4f4e:1::43): ").strip()
     gen4NetworkInterfaceAddress = f"fd44:594e:4f4e:1::{last_two_hex}"
+
     sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
     sock.bind((gen4NetworkInterfaceAddress, portNumber))
 
@@ -319,15 +335,17 @@ def main():
         values = DM.get_all_values()
         DSM.resetPointer()
         DSM.print_line(f"Up Time: {time.time() - start_time:.2f}s")
-        DSM.print_line(f"{'DataName':<40} | {'Value':>10} | {'FPS':>10} | {'Connected':<10}")
+        DSM.print_line(f"{'DataName':<30} | {'Value':>10} | {'FPS':>10} | {'Connected':<10} | {'Status'}")
         DSM.print_line("-" * 100)
         for name, value in values.items():
+            bad_val = False
             if(value is None):
                 value = 0.0
+                bad_val = True
             connected = "Yes" if DM.get_is_connected(name) else "No"
             fps = DM.get_fps(name)
             fps_str = f"{fps:.1f}" if fps < 1000 else f"{fps:.0f}"
-            DSM.print_line(f"{name:<40} | {value:>10.2f} | {fps_str:>10} | {connected:<10}")
+            DSM.print_line(f"{name:<30} | {value:>10.2f} | {fps_str:>10} | {connected:<10} | {'BAD' if bad_val else ''}")
         
         time.sleep(0.1)
 
