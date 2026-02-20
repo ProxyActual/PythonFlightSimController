@@ -281,11 +281,10 @@ class HsiSim:
                         "s": time.localtime().tm_sec
                     },
                     "nav": {
-                        "crs_dev": self.data_manager.get_value_safe("NAV_CDI:1"),
-                        "gsi_dev": self.data_manager.get_value_safe("NAV_GSI"),
-                        "active_freq": self.data_manager.get_value_safe("NAV_ACTIVE_FREQUENCY:1"),
+                        "crs_dev": 20.0,
+                        "active_freq": 111.2,
                         "active_freq_ils": True,
-                        "standby_freq": self.data_manager.get_value_safe("NAV_STANDBY_FREQUENCY:1"),
+                        "standby_freq": 110.25,
                         "standby_freq_ils": False,
                     }
                 }
