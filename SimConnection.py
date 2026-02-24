@@ -241,7 +241,7 @@ class HsiSim:
     def run(self):
         last_time = time.time()
         while self.running:
-            if(time.time() - last_time > 1.0/17.0):
+            if(time.time() - last_time > 1.0/64.0):
                 packet = self.get_cbor_packet()
                 if(self.sequenceNumber > 16):
                     self.sock.sendto(packet, self.adahrsAddr)
@@ -260,32 +260,16 @@ class HsiSim:
                     "version" : 1,
                     "valid": True,
                     "tick": self.sequenceNumber,
-
                     "pos": {
                         "mag_var": 0.0,
-                        "lat" : self.data_manager.get_value_safe("PLANE_LATITUDE"),
-                        "lon" : self.data_manager.get_value_safe("PLANE_LONGITUDE"),
-                        "alt" : self.data_manager.get_value_safe("PRESSURE_ALTITUDE"),
-                        "lat_lon_valid": True,
-                        "alt_valid": True,
-                        "timestamp": 20,
-                        "gndspd": self.data_manager.get_value_safe("GROUND_VELOCITY"),
-                        "gndtrk": 90.0
-                    },
-                    "time": {
-                        "y": time.localtime().tm_year,
-                        "m": time.localtime().tm_mon,
-                        "d": time.localtime().tm_mday,
-                        "h": time.localtime().tm_hour,
-                        "min": time.localtime().tm_min,
-                        "s": time.localtime().tm_sec
-                    },
-                    "nav": {
-                        "crs_dev": 20.0,
-                        "active_freq": 111.2,
-                        "active_freq_ils": True,
-                        "standby_freq": 110.25,
-                        "standby_freq_ils": False,
+                        "lat" : float(self.data_manager.get_value_safe("PLANE_LATITUDE")),
+                        "lon" : float(self.data_manager.get_value_safe("PLANE_LONGITUDE")),
+                        # "alt" : self.data_manager.get_value_safe("PRESSURE_ALTITUDE"),
+                        # "lat_lon_valid": True,
+                        # "alt_valid": True,
+                        # "timestamp": 20,
+                        # "gndspd": self.data_manager.get_value_safe("GROUND_VELOCITY"),
+                        # "gndtrk": 10.0
                     }
                 }
             }
