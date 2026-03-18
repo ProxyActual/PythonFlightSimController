@@ -7,6 +7,8 @@ import socket
 import cbor2
 import tkinter as tk
 import netifaces
+from datetime import datetime
+from math import cos, sin
 
 frame_check = 1498304334
 portNumber = 49301
@@ -20,15 +22,23 @@ default_values = {
     "TURN_COORDINATOR_BALL": 0.0,
     "G_FORCE": 1.0,
     "PRESSURE_ALTITUDE": 1500.0,
-    "AIRSPEED_INDICATED": 0.0,
-    "AIRSPEED_TRUE": 0.0,
+    "AIRSPEED_INDICATED": 100.0,
+    "AIRSPEED_TRUE": 100.0,
     "INCIDENCE_ALPHA": 0.0,
     "STANDARD_ATM_TEMPERATURE": 15.0,
-    "PLANE_HEADING_DEGREES_MAGNETIC": 0.0,
+    "PLANE_HEADING_DEGREES_MAGNETIC": 40.0,
     "PLANE_PITCH_DEGREES": 0.0,
     "PLANE_BANK_DEGREES": 0.0,
     "PLANE_LATITUDE": 47.0,
-    "PLANE_LONGITUDE": -122.0
+    "PLANE_LONGITUDE": -122.0,
+    "GPS MAGVAR": 0.0,
+
+    "NAV_ACTIVE_FREQUENCY:1": 109.6,
+    "NAV_STANDBY_FREQUENCY:1": 110.3,
+    "NAV_CDI:1": 110,
+    "HSI_HAS_LOCALIZER": 1.0,
+    "HSI_GSI_NEEDLE": 0.0,
+    "GPS_GROUND_MAGNETIC_TRACK": 0.0
 }
 
 class DataThread:
@@ -208,7 +218,7 @@ class AdahrsSim:
                     "oat": self.data_manager.get_value_safe("STANDARD_ATM_TEMPERATURE"),
                     "world": {
                         "ypr": [ # For whatever reason, MSFS gives these in radians, but specifies them as degrees.
-                            self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_HEADING_DEGREES_MAGNETIC")),
+                            self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_HEADING_DEGREES_MAGNETIC") * (3.141592653589793 / 180.0)),
                             -self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_PITCH_DEGREES")),
                             -self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_BANK_DEGREES"))
                         ],
@@ -261,15 +271,33 @@ class HsiSim:
                     "valid": True,
                     "tick": self.sequenceNumber,
                     "pos": {
-                        "mag_var": 0.0,
+                        "mag_var": float(self.data_manager.get_value_safe("GPS MAGVAR")),
                         "lat" : float(self.data_manager.get_value_safe("PLANE_LATITUDE")),
                         "lon" : float(self.data_manager.get_value_safe("PLANE_LONGITUDE")),
-                        # "alt" : self.data_manager.get_value_safe("PRESSURE_ALTITUDE"),
-                        # "lat_lon_valid": True,
-                        # "alt_valid": True,
-                        # "timestamp": 20,
-                        # "gndspd": self.data_manager.get_value_safe("GROUND_VELOCITY"),
-                        # "gndtrk": 10.0
+                        "alt" : float(self.data_manager.get_value_safe("PRESSURE_ALTITUDE")),
+                        "lat_lon_valid": True,
+                        "alt_valid": True,
+                        "timestamp": 20,
+                        "gndspd": float(self.data_manager.get_value_safe("GROUND_VELOCITY")),
+                        "gndtrk": float(self.data_manager.get_value_safe("GPS_GROUND_MAGNETIC_TRACK") * (3.141592653589793 / 180.0))
+                    },
+                    "time": {
+                        "y": datetime.utcnow().year,
+                        "m": datetime.utcnow().month,
+                        "d": datetime.utcnow().day,
+                        "h": datetime.utcnow().hour,
+                        "min": datetime.utcnow().minute,
+                        "s": datetime.utcnow().second
+                    },
+                    "nav": {
+                        "crs_dev": float(self.data_manager.get_value_safe("NAV_CDI:1")),
+                        "roll_cmd_valid": False,
+                        "roll_cmd": float(0.0),
+                        "active_freq": float(self.data_manager.get_value_safe("NAV_ACTIVE_FREQUENCY:1") * 1000),
+                        "standby_freq": float(self.data_manager.get_value_safe("NAV_STANDBY_FREQUENCY:1") * 1000),
+                        "active_freq_ils": True if self.data_manager.get_value_safe("HSI_HAS_LOCALIZER") == 1.0 else False,
+                        "standby_freq_ils": False,
+                        "gsi_deflection": float(self.data_manager.get_value_safe("HSI_GSI_NEEDLE"))
                     }
                 }
             }
@@ -278,7 +306,67 @@ class HsiSim:
 
         return cbor2.dumps(data)
 
-    
+class gen4Network:
+    sock = None
+
+    def __init__(self):
+         # Automatically find the last two hex values from network interfaces
+        last_two_hex = None
+        for interface in netifaces.interfaces():
+            addrs = netifaces.ifaddresses(interface)
+            if netifaces.AF_INET6 in addrs:
+                for addr_info in addrs[netifaces.AF_INET6]:
+                    addr = addr_info['addr'].split('%')[0]  # Remove scope ID if present
+                    # Look for fd44:594e:4f4e:1:: prefix
+                    if addr.startswith('fd44:594e:4f4e:1::') and addr != 'fd44:594e:4f4e:1::':
+                        # Extract the last part after the prefix
+                        last_part = addr.replace('fd44:594e:4f4e:1::', '')
+                        if last_part:
+                            last_two_hex = last_part
+                            print(f"Found Gen4 interface: {interface} - {addr}")
+                            break
+            if last_two_hex:
+                break
+
+        if not last_two_hex:
+            last_two_hex = input("Could not auto-detect. Enter the last two hex values for Gen4 address (e.g. '43' for fd44:594e:4f4e:1::43): ").strip()
+        gen4NetworkInterfaceAddress = f"fd44:594e:4f4e:1::{last_two_hex}"
+
+        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        self.sock.bind((gen4NetworkInterfaceAddress, portNumber))
+
+
+def aircraftSim(delta_time):
+    tas = default_values["AIRSPEED_TRUE"]
+    heading = default_values["GPS_GROUND_MAGNETIC_TRACK"]
+
+    default_values["GPS_GROUND_MAGNETIC_TRACK"]+= delta_time # Simulate a turn at 10 degrees per second
+    if(default_values["GPS_GROUND_MAGNETIC_TRACK"] >= 360.0):
+        default_values["GPS_GROUND_MAGNETIC_TRACK"] -= 360.0
+
+    default_values["VERTICAL_SPEED"] = 400.0 * sin(time.time()) # Simulate a vertical speed oscillation
+
+    default_values["PRESSURE_ALTITUDE"] += default_values["VERTICAL_SPEED"] * delta_time / 60.0 # Convert feet per minute to feet per second
+    default_values["HSI_GSI_NEEDLE"] = 1000 * sin(time.time()) # Simulate a GSI needle oscillation
+
+
+    default_values["PLANE_HEADING_DEGREES_MAGNETIC"] = (default_values["GPS_GROUND_MAGNETIC_TRACK"] - 17) % 360
+
+    # Update lat/lon based on heading
+    heading_rad = heading * (3.141592653589793 / 180.0)
+
+    lat_change = (tas * cos(heading_rad)) * delta_time / 3600.0  # Convert knots to degrees per second
+    lon_change = (tas * sin(heading_rad)) * delta_time / 3600.0  # Convert knots to degrees per second
+
+    lon_change = lon_change / cos(heading_rad)  # Adjust for latitude convergence
+
+
+    default_values["PLANE_LATITUDE"] += lat_change
+    default_values["PLANE_LONGITUDE"] += lon_change
+
+    default_values["NAV_CDI:1"] = 1 * sin(time.time()) # Simulate a CDI oscillation
+
+
 
 def main():
     print("Starting Data Manager...")
@@ -313,9 +401,13 @@ def main():
 
     adahrs = AdahrsSim(DM, sock)
     hsi = HsiSim(DM, sock)
+    last_time = time.time()
 
     while(True):
         values = DM.get_all_values()
+        if(not DM.get_is_connected("VERTICAL_SPEED")):
+            aircraftSim(time.time() - last_time)
+        last_time = time.time()
         DSM.resetPointer()
         DSM.print_line(f"Up Time: {time.time() - start_time:.2f}s")
         DSM.print_line(f"{'DataName':<30} | {'Value':>10} | {'FPS':>10} | {'Connected':<10} | {'Status'}")
