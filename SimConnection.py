@@ -8,7 +8,7 @@ import cbor2
 import tkinter as tk
 import netifaces
 from datetime import datetime
-from math import cos, sin
+from math import cos, sin, radians, degrees
 
 frame_check = 1498304334
 portNumber = 49301
@@ -22,8 +22,8 @@ default_values = {
     "TURN_COORDINATOR_BALL": 0.0,
     "G_FORCE": 1.0,
     "PRESSURE_ALTITUDE": 1500.0,
-    "AIRSPEED_INDICATED": 100.0,
-    "AIRSPEED_TRUE": 100.0,
+    "AIRSPEED_INDICATED": 300.0,
+    "AIRSPEED_TRUE": 300.0,
     "INCIDENCE_ALPHA": 0.0,
     "STANDARD_ATM_TEMPERATURE": 15.0,
     "PLANE_HEADING_DEGREES_MAGNETIC": 40.0,
@@ -36,9 +36,10 @@ default_values = {
     "NAV_ACTIVE_FREQUENCY:1": 109.6,
     "NAV_STANDBY_FREQUENCY:1": 110.3,
     "NAV_CDI:1": 110,
+    "NAV_OBS:1": 62.0,
     "HSI_HAS_LOCALIZER": 1.0,
     "HSI_GSI_NEEDLE": 0.0,
-    "GPS_GROUND_MAGNETIC_TRACK": 0.0
+    "GPS_GROUND_MAGNETIC_TRACK": 90.0
 }
 
 class DataThread:
@@ -202,11 +203,11 @@ class AdahrsSim:
                         "xyz_rate": [
                             self.data_manager.get_value_safe("ROTATION_VELOCITY_BODY_X"),
                             self.data_manager.get_value_safe("ROTATION_VELOCITY_BODY_Y"),
-                            self.data_manager.get_value_safe("ROTATION_VELOCITY_BODY_Z")
+                            float(self.data_manager.get_value_safe("ROTATION_VELOCITY_BODY_Z")  * 57.2958 / 3.28)
                         ],
                         "xyz_acc": [
                             0.0,
-                            -self.data_manager.get_value_safe("TURN_COORDINATOR_BALL"),
+                            -self.data_manager.get_value_safe("TURN_COORDINATOR_BALL") * -.3,
                             -self.data_manager.get_value_safe("G_FORCE")
                         ]
                     },
@@ -297,6 +298,7 @@ class HsiSim:
                         "standby_freq": float(self.data_manager.get_value_safe("NAV_STANDBY_FREQUENCY:1") * 1000),
                         "active_freq_ils": True if self.data_manager.get_value_safe("HSI_HAS_LOCALIZER") == 1.0 else False,
                         "standby_freq_ils": False,
+                        "crs_org_dest": float(self.data_manager.get_value_safe("NAV_OBS:1")),
                         "gsi_deflection": float(self.data_manager.get_value_safe("HSI_GSI_NEEDLE"))
                     }
                 }
@@ -336,34 +338,80 @@ class gen4Network:
         self.sock.bind((gen4NetworkInterfaceAddress, portNumber))
 
 
+def calculate_position_change(magnetic_heading, true_airspeed, delta_time, lat, lon, magnetic_declination=0.0):
+    """
+    Calculate the change in latitude and longitude based on magnetic heading, true airspeed, and time.
+    
+    Args:
+        magnetic_heading: Aircraft heading in degrees (0-360, magnetic north)
+        true_airspeed: True airspeed in knots
+        delta_time: Time delta in seconds
+        lat: Current latitude in decimal degrees
+        lon: Current longitude in decimal degrees
+        magnetic_declination: Magnetic declination in degrees (positive = east, negative = west)
+    
+    Returns:
+        tuple: (delta_lat, delta_lon) change in decimal degrees
+    """
+    # Constants
+    EARTH_RADIUS_NM = 3440.06  # Earth's radius in nautical miles
+    
+    # Convert magnetic heading to true heading
+    true_heading = (magnetic_heading + magnetic_declination) % 360.0
+    
+    # Distance traveled in nautical miles
+    distance_nm = true_airspeed * (delta_time / 3600.0)
+    
+    # Convert heading to radians
+    heading_rad = radians(true_heading)
+    lat_rad = radians(lat)
+    
+    # Calculate changes using spherical Earth approximation (haversine-based)
+    # For small distances, this is accurate enough
+    delta_lat = distance_nm * cos(heading_rad) / 60.0  # 1 nautical mile = 1 minute of latitude
+    
+    # Longitude changes need to account for latitude convergence
+    # At the equator, 1 minute longitude = 1 nautical mile
+    # At higher latitudes, longitude distance decreases
+    new_lat_rad = radians(lat + delta_lat)
+    delta_lon = distance_nm * sin(heading_rad) / (60.0 * cos(new_lat_rad))
+    
+    return (delta_lat, delta_lon)
+
+
 def aircraftSim(delta_time):
     tas = default_values["AIRSPEED_TRUE"]
-    heading = default_values["GPS_GROUND_MAGNETIC_TRACK"]
+    magnetic_heading = default_values["PLANE_HEADING_DEGREES_MAGNETIC"]
+    magnetic_declination = default_values["GPS MAGVAR"]
+    lat = default_values["PLANE_LATITUDE"]
+    lon = default_values["PLANE_LONGITUDE"]
 
-    default_values["GPS_GROUND_MAGNETIC_TRACK"]+= delta_time # Simulate a turn at 10 degrees per second
     if(default_values["GPS_GROUND_MAGNETIC_TRACK"] >= 360.0):
-        default_values["GPS_GROUND_MAGNETIC_TRACK"] -= 360.0
+        default_values["GPS_GROUND_MAGNETIC_TRACK"] = 0.0
 
     default_values["VERTICAL_SPEED"] = 400.0 * sin(time.time()) # Simulate a vertical speed oscillation
 
     default_values["PRESSURE_ALTITUDE"] += default_values["VERTICAL_SPEED"] * delta_time / 60.0 # Convert feet per minute to feet per second
     default_values["HSI_GSI_NEEDLE"] = 1000 * sin(time.time()) # Simulate a GSI needle oscillation
 
+    default_values["PLANE_HEADING_DEGREES_MAGNETIC"] = (default_values["GPS_GROUND_MAGNETIC_TRACK"]) % 360
 
-    default_values["PLANE_HEADING_DEGREES_MAGNETIC"] = (default_values["GPS_GROUND_MAGNETIC_TRACK"] - 17) % 360
+    # Calculate position change accounting for Earth's shape and magnetic declination
+    delta_lat, delta_lon = calculate_position_change(
+        magnetic_heading, 
+        tas, 
+        delta_time, 
+        lat, 
+        lon, 
+        magnetic_declination
+    )
+    
+    default_values["PLANE_LATITUDE"] += delta_lat
+    default_values["PLANE_LONGITUDE"] += delta_lon
 
-    # Update lat/lon based on heading
-    heading_rad = heading * (3.141592653589793 / 180.0)
-
-    lat_change = (tas * cos(heading_rad)) * delta_time / 3600.0  # Convert knots to degrees per second
-    lon_change = (tas * sin(heading_rad)) * delta_time / 3600.0  # Convert knots to degrees per second
-
-    lon_change = lon_change / cos(heading_rad)  # Adjust for latitude convergence
-
-
-    default_values["PLANE_LATITUDE"] += lat_change
-    default_values["PLANE_LONGITUDE"] += lon_change
-
+    default_values["PLANE_PITCH_DEGREES"] = radians(-5.0 * default_values["VERTICAL_SPEED"] / 400.0) # Simulate a pitch oscillation
+    default_values["PLANE_BANK_DEGREES"] = radians(10.0 * sin(time.time()/10)) # Simulate a bank oscillation
+    default_values["GPS_GROUND_MAGNETIC_TRACK"] -= default_values["PLANE_BANK_DEGREES"] # Simulate a constant turn to the right
     default_values["NAV_CDI:1"] = 1 * sin(time.time()) # Simulate a CDI oscillation
 
 
@@ -422,7 +470,7 @@ def main():
             fps_str = f"{fps:.1f}" if fps < 1000 else f"{fps:.0f}"
             DSM.print_line(f"{name:<30} | {value:>10.2f} | {fps_str:>10} | {connected:<10} | {'BAD' if bad_val else ''}")
         
-        time.sleep(0.1)
+        time.sleep(0.016)
 
 if __name__ == "__main__":
     main()
