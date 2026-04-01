@@ -100,7 +100,7 @@ class MSFSConnector:
         self.thread.start()
 
     def convert_to_degrees(self, value):
-        return value * 57.2958 / 3.28
+        return value * (180.0 / 3.141592653589793)
 
     def run(self):
         while True:
@@ -116,13 +116,18 @@ class MSFSConnector:
                     -self.data_manager.get_value_safe("G_FORCE")
                 ]
                 self.aircraft_state.world["ypr"] = [
-                    self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_HEADING_DEGREES_TRUE")),
+                    self.convert_to_degrees(self.data_manager.get_value_safe("GPS_GROUND_MAGNETIC_TRACK")),
                     self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_PITCH_DEGREES")),
                     self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_BANK_DEGREES"))
                 ]
                 self.aircraft_state.air_data["p_alt"] = self.data_manager.get_value_safe("PRESSURE_ALTITUDE")
                 self.aircraft_state.air_data["vs"] = self.data_manager.get_value_safe("VERTICAL_SPEED")
-                self.aircraft_state.air_data["ias"] = self.data_manager.get_value_safe("INDICATED_AIRSPEED")
+                self.aircraft_state.air_data["ias"] = self.data_manager.get_value_safe("AIRSPEED_INDICATED")
                 #self.aircraft_state.air_data["tas"] = this is not used by sv
                 self.aircraft_state.air_data["aoa"] = self.data_manager.get_value_safe("INCIDENT_ALPHA")
                 self.aircraft_state.air_data["oat"] = self.data_manager.get_value_safe("STANDARD_ATM_TEMPERATURE") - 460.0
+
+                self.aircraft_state.gps_data["lat"] = self.data_manager.get_value_safe("PLANE_LATITUDE")
+                self.aircraft_state.gps_data["lon"] = self.data_manager.get_value_safe("PLANE_LONGITUDE")
+                self.aircraft_state.gps_data["alt"] = self.data_manager.get_value_safe("PRESSURE_ALTITUDE")
+                self.aircraft_state.gps_data["gndtrk"] = self.convert_to_degrees(self.data_manager.get_value_safe("GPS_GROUND_MAGNETIC_TRACK"))

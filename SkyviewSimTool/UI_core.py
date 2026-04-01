@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
+import threading
+import time
 
 try:
 	from .AircraftState import AircraftState
@@ -28,6 +30,9 @@ class AircraftStateUI(tk.Tk):
 		self._build_ui()
 		self._refresh_form()
 		self._set_status("Ready.")
+
+		self._start_auto_refresh()
+		self.protocol("WM_DELETE_WINDOW", self._on_closing)
 
 	def _build_ui(self) -> None:
 		container = ttk.Frame(self)
@@ -66,6 +71,8 @@ class AircraftStateUI(tk.Tk):
 				label_text = f"{field_name}:"
 				if section_name == "air_data" and field_name == "p_alt":
 					label_text = "p_alt (ft):"
+				if section_name == "gps_data" and field_name == "alt":
+					label_text = "alt (ft):"
 
 				ttk.Label(frame, text=label_text).grid(
 					column=0, row=row, sticky="w", padx=(0, 8), pady=4
@@ -83,6 +90,8 @@ class AircraftStateUI(tk.Tk):
 				label_text = f"{field_name}:"
 				if section_name == "air_data" and field_name == "p_alt":
 					label_text = "p_alt (ft):"
+				if section_name == "gps_data" and field_name == "alt":
+					label_text = "alt (ft):"
 
 				ttk.Label(frame, text=label_text).grid(
 					column=0, row=row, sticky="w", padx=(0, 8), pady=4
@@ -156,6 +165,52 @@ class AircraftStateUI(tk.Tk):
 
 	def _set_status(self, message: str) -> None:
 		self.status_var.set(message)
+
+	def _start_auto_refresh(self) -> None:
+		self._refresh_thread = threading.Thread(target=self._auto_refresh_loop, daemon=True)
+		self._refresh_thread.start()
+
+	def _auto_refresh_loop(self) -> None:
+		while True:
+			try:
+				time.sleep(0.1)
+				self.after(0, self._refresh_form_live)
+			except Exception:
+				break
+
+	def _refresh_form_live(self) -> None:
+		try:
+			focus_widget = self.focus_get()
+			focused_field_key = None
+			if isinstance(focus_widget, ttk.Entry):
+				for key, var in self.field_vars.items():
+					if focus_widget.cget("textvariable") == str(var):
+						focused_field_key = key
+						break
+
+			for section_name in ("air_data", "gps_data", "hsi_data", "body", "world"):
+				section = getattr(self.aircraft_state, section_name)
+				for field_name, value in section.items():
+					if isinstance(value, list):
+						for index, item in enumerate(value):
+							key = (section_name, field_name, index)
+							if key != focused_field_key:
+								var = self._get_field_var(section_name, field_name, index)
+								formatted = self._format_value(section_name, field_name, item)
+								if var.get() != formatted:
+									var.set(formatted)
+					else:
+						key = (section_name, field_name, None)
+						if key != focused_field_key:
+							var = self._get_field_var(section_name, field_name, None)
+							formatted = self._format_value(section_name, field_name, value)
+							if var.get() != formatted:
+								var.set(formatted)
+		except Exception:
+			pass
+
+	def _on_closing(self) -> None:
+		self.destroy()
 
 
 

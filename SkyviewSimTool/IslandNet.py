@@ -76,15 +76,15 @@ class AdahrsG4Dat:
                     "aoa": self.aircraft_state.air_data["aoa"],
                     "oat": self.aircraft_state.air_data["oat"],
                     "world": {
-                        "ypr": [ # For whatever reason, MSFS gives these in radians, but specifies them as degrees.
-                            self.convert_to_degrees(self.aircraft_state.world["ypr"][0]),
-                            -self.convert_to_degrees(self.aircraft_state.world["ypr"][1]),
-                            -self.convert_to_degrees(self.aircraft_state.world["ypr"][2])
+                        "ypr": [
+                            self.aircraft_state.world["ypr"][0],
+                            -self.aircraft_state.world["ypr"][1],
+                            -self.aircraft_state.world["ypr"][2]
                         ],
                         "ypr_rate": [
-                            self.convert_to_degrees(self.aircraft_state.world["ypr_rate"][0]),
-                            self.convert_to_degrees(self.aircraft_state.world["ypr_rate"][1]),
-                            self.convert_to_degrees(self.aircraft_state.world["ypr_rate"][2])
+                            self.aircraft_state.world["ypr_rate"][0],
+                            self.aircraft_state.world["ypr_rate"][1],
+                            self.aircraft_state.world["ypr_rate"][2]
                         ]
                     }
                 }
@@ -133,7 +133,7 @@ class HsiG4Dat:
                         "mag_var": self.aircraft_state.hsi_data["mag_var"],
                         "lat" : self.aircraft_state.gps_data["lat"],
                         "lon" : self.aircraft_state.gps_data["lon"],
-                        "alt" : self.aircraft_state.gps_data["alt"],
+                        "alt" : self.aircraft_state.gps_data["alt"] * .3048, # convert to meters
                         "lat_lon_valid": bool(self.aircraft_state.hsi_data["lat_lon_valid"]),
                         "alt_valid": bool(self.aircraft_state.hsi_data["alt_valid"]),
                         "timestamp": int(self.aircraft_state.hsi_data["timestamp"]),
