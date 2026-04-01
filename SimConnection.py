@@ -216,10 +216,10 @@ class AdahrsSim:
                     "ias": self.convert_to_mps(self.data_manager.get_value_safe("AIRSPEED_INDICATED")),
                     "tas": self.convert_to_mps(self.data_manager.get_value_safe("AIRSPEED_TRUE")),
                     "aoa": self.data_manager.get_value_safe("INCIDENCE_ALPHA"),
-                    "oat": self.data_manager.get_value_safe("STANDARD_ATM_TEMPERATURE"),
+                    "oat": self.data_manager.get_value_safe("STANDARD_ATM_TEMPERATURE") - 460.0,
                     "world": {
                         "ypr": [ # For whatever reason, MSFS gives these in radians, but specifies them as degrees.
-                            self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_HEADING_DEGREES_MAGNETIC") * (3.141592653589793 / 180.0)),
+                            self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_HEADING_DEGREES_MAGNETIC")),
                             -self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_PITCH_DEGREES")),
                             -self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_BANK_DEGREES"))
                         ],
@@ -414,12 +414,11 @@ def aircraftSim(delta_time):
     default_values["GPS_GROUND_MAGNETIC_TRACK"] -= default_values["PLANE_BANK_DEGREES"] # Simulate a constant turn to the right
     default_values["NAV_CDI:1"] = 1 * sin(time.time()) # Simulate a CDI oscillation
 
-
-
 def main():
     print("Starting Data Manager...")
     DSM = DisplayManager()
     DM = DataManager()
+    DM.get_value("NAV_CDI:2")
     start_time = time.time()
     # Get user input for the last two hex values of the Gen4 network interface address
     # Automatically find the last two hex values from network interfaces
@@ -465,10 +464,11 @@ def main():
             if(value is None):
                 value = 0.0
                 bad_val = True
-            connected = "Yes" if DM.get_is_connected(name) else "No"
-            fps = DM.get_fps(name)
-            fps_str = f"{fps:.1f}" if fps < 1000 else f"{fps:.0f}"
-            DSM.print_line(f"{name:<30} | {value:>10.2f} | {fps_str:>10} | {connected:<10} | {'BAD' if bad_val else ''}")
+            if(name == "PLANE_LONGITUDE"):
+                connected = "Yes" if DM.get_is_connected(name) else "No"
+                fps = DM.get_fps(name)
+                fps_str = f"{fps:.1f}" if fps < 1000 else f"{fps:.0f}"
+                DSM.print_line(f"{name:<30} | {value:>10.2f} | {fps_str:>10} | {connected:<10} | {'BAD' if bad_val else ''}")
         
         time.sleep(0.016)
 
