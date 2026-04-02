@@ -23,7 +23,7 @@ class AircraftStateUI(tk.Tk):
 		self.field_vars: dict[tuple[str, str, int | None], tk.StringVar] = {}
 		self.status_var = tk.StringVar()
 
-		self.title("Aircraft State Editor")
+		self.title("Aircraft State Solution")
 		self.resizable(True, True)
 		self.configure(padx=16, pady=16)
 

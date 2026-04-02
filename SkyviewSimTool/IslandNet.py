@@ -157,7 +157,8 @@ class HsiG4Dat:
                         "active_freq_ils": bool(self.aircraft_state.hsi_data["active_freq_ils"]),
                         "standby_freq_ils": bool(self.aircraft_state.hsi_data["standby_freq_ils"]),
                         "crs_org_dest": self.aircraft_state.hsi_data["crs_org_dest"],
-                        "gsi_deflection": self.aircraft_state.hsi_data["gsi_deflection"]
+                        "gsi_deflection": self.aircraft_state.hsi_data["gsi_deflection"],
+                        "final_appr_seg": bool(self.aircraft_state.hsi_data["final_appr_seg"])
                     }
                 }
             }

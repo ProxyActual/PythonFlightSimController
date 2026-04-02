@@ -35,7 +35,8 @@ class AircraftState:
         "active_freq_ils": 0.0,
         "standby_freq_ils": 0.0,
         "crs_org_dest": 0.0,
-        "gsi_deflection": 0.0
+        "gsi_deflection": 0.0,
+        "final_appr_seg": 0.0
     }
     
     def get_p_alt(self) -> float:
