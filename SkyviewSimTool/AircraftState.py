@@ -1,3 +1,6 @@
+import time
+import math
+
 class AircraftState:
     body = {
         "xyz_rate": [0.0, 0.0, 0.0],
@@ -23,25 +26,43 @@ class AircraftState:
         "gndtrk": 0.0
     }
     hsi_data = {
+        "active_freq_ils": True,
+        "standby_freq_ils": True,
+        "roll_cmd_valid": True,
+        "final_appr_seg": False,
+        "lat_lon_valid": True,
+        "alt_valid": True,
         "mag_var": 0.0,
-        "lat_lon_valid": 1.0,
-        "alt_valid": 1.0,
         "timestamp": 20.0,
         "crs_dev": 0.0,
-        "roll_cmd_valid": 0.0,
         "roll_cmd": 0.0,
         "active_freq": 0.0,
         "standby_freq": 0.0,
-        "active_freq_ils": 0.0,
-        "standby_freq_ils": 0.0,
         "crs_org_dest": 0.0,
-        "gsi_deflection": 0.0,
-        "final_appr_seg": 0.0
+        "gsi_deflection": 0.0
     }
-    
-    def get_p_alt(self) -> float:
-        return self.air_data["p_alt"]
 
-    
-    def set_p_alt(self, value: float) -> None:
-        self.air_data["p_alt"] = value
+    sim_state = {
+        "use msfs" : False,
+        "roughSim": False
+    }
+
+    prev_time = time.time()
+
+
+    def positionSim(self, dt):
+        print("Simulating position", dt)
+        self.gps_data["lat"] += self.gps_data["gndspd"] * dt * math.cos(math.radians(self.gps_data["gndtrk"])) / 111319.9
+        self.gps_data["lon"] += self.gps_data["gndspd"] * dt * math.sin(math.radians(self.gps_data["gndtrk"])) / (111319.9 * math.cos(math.radians(self.gps_data["lat"])))
+        self.gps_data["alt"] += self.air_data["vs"] * dt * .3048
+        self.air_data["p_alt"] = self.gps_data["alt"] * .3048
+        self.world["ypr"][0] = (self.gps_data["gndtrk"] + self.hsi_data["mag_var"]) % 360
+
+    def roughSim(self):
+        if(self.sim_state["roughSim"]):
+            print("Running rough sim")
+            self.positionSim(time.time() - self.prev_time)
+            self.prev_time = time.time()
+        else:
+            self.prev_time = time.time()
+

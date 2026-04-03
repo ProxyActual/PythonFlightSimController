@@ -131,3 +131,6 @@ class MSFSConnector:
                 self.aircraft_state.gps_data["lon"] = self.data_manager.get_value_safe("PLANE_LONGITUDE")
                 self.aircraft_state.gps_data["alt"] = self.data_manager.get_value_safe("PRESSURE_ALTITUDE")
                 self.aircraft_state.gps_data["gndtrk"] = self.convert_to_degrees(self.data_manager.get_value_safe("GPS_GROUND_MAGNETIC_TRACK"))
+
+                self.aircraft_state.hsi_data["crs_dev"] = self.data_manager.get_value_safe("NAV_CDI:1")
+                self.aircraft_state.hsi_data["gsi_deflection"] = self.data_manager.get_value_safe("HSI_GSI_NEEDLE")
