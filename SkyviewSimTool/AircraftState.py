@@ -34,18 +34,25 @@ class AircraftState:
         "alt_valid": True,
         "mag_var": 0.0,
         "timestamp": 20.0,
-        "crs_dev": 0.0,
+        "crs_dev": -110.0,
         "roll_cmd": 0.0,
         "active_freq": 0.0,
         "standby_freq": 0.0,
         "crs_org_dest": 0.0,
-        "gsi_deflection": 0.0
+        "gsi_deflection": -110.0
     }
 
     sim_state = {
         "use msfs" : False,
-        "roughSim": False
+        "roughSim": False,
+        "fake_servos": False
     }
+
+    servo_data = [{
+        "motor_position": 0.0,
+    },{
+        "motor_position": 0.0,
+    }]
 
     prev_time = time.time()
 
@@ -57,6 +64,7 @@ class AircraftState:
         self.gps_data["alt"] += self.air_data["vs"] * dt * .3048
         self.air_data["p_alt"] = self.gps_data["alt"] * .3048
         self.world["ypr"][0] = (self.gps_data["gndtrk"] + self.hsi_data["mag_var"]) % 360
+        self.air_data["ias"] = self.gps_data["gndspd"] * 1.94384
 
     def roughSim(self):
         if(self.sim_state["roughSim"]):

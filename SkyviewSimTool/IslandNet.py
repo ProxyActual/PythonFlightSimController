@@ -94,6 +94,74 @@ class AdahrsG4Dat:
 
         return cbor2.dumps(data)
 
+class ServoG4Dat:
+    topic = 9
+    servoAddr = ('ff13::4459:' + hex(topic)[2:], portNumber)
+    sequenceNumber = 0
+    running = True
+
+    def __init__(self, sock, aircraft_state, id):
+        self.sock = sock
+        self.aircraft_state = aircraft_state
+        self.id = id
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
+
+    def run(self):
+        last_time = time.time()
+        while self.running:
+            if(time.time() - last_time > 1.0/65.0 and self.aircraft_state.sim_state["fake_servos"]):
+                self.sock.sendto(self.get_cbor_packet(), self.servoAddr)
+                last_time = time.time()
+            else:
+                time.sleep(0.001)
+    
+    def get_cbor_packet(self):
+        data = {
+            "d": frame_check,
+            "seq": self.sequenceNumber,
+            "topic": self.topic,
+            "txid": self.id,
+            "payload": {
+                "SrvoStat_V1": {
+                    "version": 1,
+                    "valid": True,
+                    "tick": self.sequenceNumber,
+                    "timestamp_ms": 0,
+                    "pgood_32v": False,
+                    "pgood_8v": False,
+                    "ship_voltage_V": 0.0,
+                    "motor_voltage_V": 0.0,
+                    "hbridge_temp_C": 0.0,
+                    "die_temp_C": 0.0,
+                    "motor_temp_C": 0.0,
+                    "ntc_b_temp_C": 0.0,
+                    "clutch_engaged": False,
+                    "clutch_W": 0.0,
+                    "motor_ms": 0,
+                    "torque": 0.0,
+                    "torque_filt": 0.0,
+                    "torque_pid_esum": 0,
+                    "iu": 0,
+                    "iv": 0,
+                    "iw": 0,
+                    "motor_position": 0,
+                    "motor_velocity": 0.0,
+                    "servo_position": self.aircraft_state.servo_data[100-self.id]["motor_position"],
+                    "servo_velocity": 0.0,
+                    "tmc_status_flags": 0,
+                    "app_error_flags": 0,
+                    "reset_cause": 0,
+                    "shaft_enc_temp_C": 0.0,
+                    "shaft_enc_x_Gauss": 0.0,
+                    "shaft_enc_y_Gauss": 0.0,
+                    "shaft_enc_z_Gauss": 0.0
+                }
+            }
+        }
+        self.sequenceNumber += 1
+
+        return cbor2.dumps(data)
 
 class HsiG4Dat:
     topic = 15
@@ -195,3 +263,4 @@ class gen4Network:
 
         self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
         self.sock.bind((gen4NetworkInterfaceAddress, portNumber))
+

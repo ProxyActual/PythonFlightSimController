@@ -8,10 +8,11 @@ try:
 	from .IslandNet import gen4Network
 	from .IslandNet import HsiG4Dat
 	from .IslandNet import AdahrsG4Dat
+	from .IslandNet import ServoG4Dat
 	from .MSFS_Connector import MSFSConnector
 except ImportError:
 	from AircraftState import AircraftState
-	from IslandNet import gen4Network, HsiG4Dat, AdahrsG4Dat
+	from IslandNet import gen4Network, HsiG4Dat, AdahrsG4Dat, ServoG4Dat
 	from MSFS_Connector import MSFSConnector
 
 aircraft_state = AircraftState()
@@ -309,5 +310,7 @@ if __name__ == "__main__":
 	msfs_connector = MSFSConnector(aircraft_state)
 	hsi_g4_dat = HsiG4Dat(gen4_network.sock, aircraft_state)
 	adahrs_g4_dat = AdahrsG4Dat(gen4_network.sock, aircraft_state)
+	Servo1 = ServoG4Dat(gen4_network.sock, aircraft_state, 100)
+	Servo2 = ServoG4Dat(gen4_network.sock, aircraft_state, 101)
 	rough_sim_worker = start_rough_sim_worker(aircraft_state)
 	launch_aircraft_state_ui()
