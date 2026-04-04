@@ -32,6 +32,8 @@ class AircraftState:
         "final_appr_seg": False,
         "lat_lon_valid": True,
         "alt_valid": True,
+        "cdi_valid": True,
+        "gsi_valid": True,
         "mag_var": 0.0,
         "timestamp": 20.0,
         "crs_dev": -110.0,
