@@ -67,6 +67,7 @@ class AircraftState:
         self.air_data["p_alt"] = self.gps_data["alt"] * .3048
         self.world["ypr"][0] = (self.gps_data["gndtrk"] + self.hsi_data["mag_var"]) % 360
         self.air_data["ias"] = self.gps_data["gndspd"] * 1.94384
+        self.hsi_data["crs_dev"] = self.hsi_data["crs_dev"] - 3 * dt
 
     def roughSim(self):
         if(self.sim_state["roughSim"]):
