@@ -30,11 +30,11 @@ class AdahrsG4Dat:
     def run(self):
         last_time = time.time()
         while self.running:
-            if(time.time() - last_time > 1.0/65.0):
+            if(time.time() - last_time > 1.0/100.0):
                 self.sock.sendto(self.get_cbor_packet(), self.adahrsAddr)
                 last_time = time.time()
             else:
-                time.sleep(0.001)
+                time.sleep(1/128)
 
     def convert_to_degrees(self, radians):
         return radians * (180.0 / 3.141592653589793)
@@ -178,13 +178,13 @@ class HsiG4Dat:
     def run(self):
         last_time = time.time()
         while self.running:
-            if(time.time() - last_time > 1.0/64.0):
+            if(time.time() - last_time > 1.0/100.0):
                 packet = self.get_cbor_packet()
                 if(self.sequenceNumber > 16):
                     self.sock.sendto(packet, self.adahrsAddr)
                 last_time = time.time()
             else:
-                time.sleep(0.001)
+                time.sleep(1/128)
     
     def get_cbor_packet(self):
         data = {
@@ -205,7 +205,7 @@ class HsiG4Dat:
                         "lat_lon_valid": bool(self.aircraft_state.hsi_data["lat_lon_valid"]),
                         "alt_valid": bool(self.aircraft_state.hsi_data["alt_valid"]),
                         "timestamp": int(self.aircraft_state.hsi_data["timestamp"]),
-                        "gndspd": self.aircraft_state.gps_data["gndspd"],
+                        "gndspd": self.aircraft_state.gps_data["gndspd"] * 0.514444,
                         "gndtrk": self.aircraft_state.gps_data["gndtrk"]
                     },
                     "time": {

@@ -307,7 +307,7 @@ def start_rough_sim_worker(state: AircraftState) -> threading.Thread:
 
 if __name__ == "__main__":
 	gen4_network = gen4Network()
-	#msfs_connector = MSFSConnector(aircraft_state)
+	msfs_connector = MSFSConnector(aircraft_state)
 	hsi_g4_dat = HsiG4Dat(gen4_network.sock, aircraft_state)
 	adahrs_g4_dat = AdahrsG4Dat(gen4_network.sock, aircraft_state)
 	Servo1 = ServoG4Dat(gen4_network.sock, aircraft_state, 100)

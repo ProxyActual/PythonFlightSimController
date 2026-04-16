@@ -104,33 +104,43 @@ class MSFSConnector:
 
     def run(self):
         while True:
-            if(self.data_manager.get_is_connected("PLANE_HEADING_DEGREES_TRUE")):
+            if(self.aircraft_state.sim_state["use msfs"] and self.data_manager.get_is_connected("PLANE_HEADING_DEGREES_TRUE")):
                 self.aircraft_state.body["xyz_rate"] = [
-                    self.convert_to_degrees(self.data_manager.get_value_safe("ROTATION_VELOCITY_BODY_X")),
-                    self.convert_to_degrees(self.data_manager.get_value_safe("ROTATION_VELOCITY_BODY_Y")),
-                    self.convert_to_degrees(self.data_manager.get_value_safe("ROTATION_VELOCITY_BODY_Z"))
+                    self.data_manager.get_value_safe("ROTATION_VELOCITY_BODY_X"),
+                    self.data_manager.get_value_safe("ROTATION_VELOCITY_BODY_Y"),
+                    self.data_manager.get_value_safe("ROTATION_VELOCITY_BODY_Z")
                 ]
                 self.aircraft_state.body["xyz_accel"] = [
                     0.0,
-                    -self.data_manager.get_value_safe("TURN_COORDINATOR_BALL") * -.3,
+                    self.data_manager.get_value_safe("TURN_COORDINATOR_BALL"),
                     -self.data_manager.get_value_safe("G_FORCE")
                 ]
                 self.aircraft_state.world["ypr"] = [
-                    self.convert_to_degrees(self.data_manager.get_value_safe("GPS_GROUND_MAGNETIC_TRACK")),
+                    self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_HEADING_DEGREES_MAGNETIC")),
                     self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_PITCH_DEGREES")),
                     self.convert_to_degrees(self.data_manager.get_value_safe("PLANE_BANK_DEGREES"))
+                ]
+                self.aircraft_state.world["ypr_rate"] = [
+                    self.convert_to_degrees(self.data_manager.get_value_safe("ROTATION_VELOCITY_WORLD_X")),
+                    self.convert_to_degrees(self.data_manager.get_value_safe("ROTATION_VELOCITY_WORLD_Y")),
+                    self.convert_to_degrees(self.data_manager.get_value_safe("ROTATION_VELOCITY_WORLD_Z"))
                 ]
                 self.aircraft_state.air_data["p_alt"] = self.data_manager.get_value_safe("PRESSURE_ALTITUDE")
                 self.aircraft_state.air_data["vs"] = self.data_manager.get_value_safe("VERTICAL_SPEED")
                 self.aircraft_state.air_data["ias"] = self.data_manager.get_value_safe("AIRSPEED_INDICATED")
-                #self.aircraft_state.air_data["tas"] = this is not used by sv
+                self.aircraft_state.air_data["tas"] = self.data_manager.get_value_safe("AIRSPEED_TRUE")
                 self.aircraft_state.air_data["aoa"] = self.data_manager.get_value_safe("INCIDENT_ALPHA")
                 self.aircraft_state.air_data["oat"] = self.data_manager.get_value_safe("STANDARD_ATM_TEMPERATURE") - 460.0
 
                 self.aircraft_state.gps_data["lat"] = self.data_manager.get_value_safe("PLANE_LATITUDE")
                 self.aircraft_state.gps_data["lon"] = self.data_manager.get_value_safe("PLANE_LONGITUDE")
-                self.aircraft_state.gps_data["alt"] = self.data_manager.get_value_safe("PRESSURE_ALTITUDE")
-                self.aircraft_state.gps_data["gndtrk"] = self.convert_to_degrees(self.data_manager.get_value_safe("GPS_GROUND_MAGNETIC_TRACK"))
+                self.aircraft_state.gps_data["alt"] = self.data_manager.get_value_safe("PRESSURE_ALTITUDE") * 3.28084
+                self.aircraft_state.gps_data["gndtrk"] = self.convert_to_degrees(self.data_manager.get_value_safe("GPS_GROUND_TRUE_TRACK"))
+                self.aircraft_state.gps_data["gndspd"] = self.data_manager.get_value_safe("AIRSPEED_INDICATED") * 1.94384
+
+                self.aircraft_state.hsi_data["mag_var"] = self.aircraft_state.world["ypr"][0] - self.aircraft_state.gps_data["gndtrk"]
 
                 self.aircraft_state.hsi_data["crs_dev"] = self.data_manager.get_value_safe("NAV_CDI:1")
                 self.aircraft_state.hsi_data["gsi_deflection"] = self.data_manager.get_value_safe("HSI_GSI_NEEDLE")
+
+            time.sleep(1/64)
